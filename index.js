@@ -6,9 +6,10 @@ const iotRoutes = require('./iOT')
 app.use(express.json());
 
 
+
+
 app.use("/iot", iotRoutes)
 app.use("/mobile", mobileRoutes)
-
 
 
 
