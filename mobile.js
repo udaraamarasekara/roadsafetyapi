@@ -41,13 +41,13 @@ router.use(authMobile)
 
 router.post("/location", (req, res) => {
     const {latitude, longitude,fcm} = req.body;
-  const sql = "INSERT INTO checkpoint (latitude, longitude,status,fcm) VALUES (?,?,'active',?)";
-  db.query(sql, [latitude, longitude,fcm], (err, result) => {
+  const sql = "INSERT INTO checkpoint (latitude, longitude,status,fcm,officer_id) VALUES (?,?,'active',?,?)";
+  db.query(sql, [latitude, longitude,fcm,req.headers.id], (err, result) => {
     if (err) {
       console.error(err);
       return res.status(500).json({ error: "Database insert failed" });
     } 
-    res.json({message:"work started!"});
+    res.json({message:"work started!",workId:result.insertId});
   });
 });
 
@@ -59,13 +59,13 @@ router.post("/approve", (req, res) => {
       console.error(err);
       return res.status(500).json({ error: "Database insert failed" });
     } 
-    res.json({message:"work started!"});
+    res.json({message:"approved!"});
   });
 });
 
 router.delete('/location/:id', (req, res) => {
   const userId = req.params.id;
-
+  console.log(userId);
   const sql = 'DELETE FROM checkpoint WHERE id = ?';
   db.query(sql, [userId], (err, result) => {
     if (err) {
@@ -77,7 +77,7 @@ router.delete('/location/:id', (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    res.json({ message: 'User deleted successfully' });
+    res.json({ message: 'Work finished' });
   });
 });
 

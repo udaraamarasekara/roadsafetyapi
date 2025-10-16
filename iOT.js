@@ -10,16 +10,17 @@ router.post("/currentStatus", async(req, res) => {
     var result = await checkForSpeed(longitude,latitude)
     var signalLight = await findMostRecentSignalLight(longitude,latitude,direction)
     var prevViolation = getViolation(vehicleNo)
-    prevViolation.type = "delete"
     if(prevViolation)
     {
+          prevViolation.type = "delete"
+
     let checkpoint = await findMostRecentCheckpoint(longitude,latitude,direction) 
     notifyViolation(req,prevViolation.fcm)
     notifyViolation(req,checkpoint.fcm)
     setViolation(vehicleNo,{time,longitude,latitude,speed,vehicle,vehicleColor,checkpoint,direction,type})
    
     }
-   res.json({"speed":result, "signalLight":signalLight})
+   res.json({"speed":result, "signalLight":signalLight,"isViolated":prevViolation.length ? 1:0 })
 });
 
 router.post("/violation", async(req, res) => {
