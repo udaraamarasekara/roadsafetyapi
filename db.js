@@ -3,9 +3,10 @@ const mysql = require('mysql2');
 
 const db = mysql.createConnection({
   host: 'localhost',
-  user: 'root',
-  password: '',
+  user:'myuser',
+  password:'mypassword',
   database: 'roadsafety'
+  
 });
 
 // Connect once when app starts
