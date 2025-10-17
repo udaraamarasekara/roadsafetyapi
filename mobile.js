@@ -1,6 +1,7 @@
 const express = require('express')
 const router = express.Router();
 const db = require('./db');
+const { clearViolation } = require('./violations');
 
 
 function authMobile(req,res,next) {
@@ -81,5 +82,11 @@ router.delete('/location/:id', (req, res) => {
   });
 });
 
+router.delete('/violation/:id', (req, res) => {
+  const vehicleNo = req.params.id;
+  clearViolation(vehicleNo)
+      res.json({ message: 'tracking finished' });
+
+});
 
 module.exports = router;
