@@ -58,7 +58,7 @@ router.post("/approve", (req, res) => {
   db.query(sql, [id, number], (err, result) => {
     if (err) {
       console.error(err);
-      return res.status(500).json({ error: "Database insert failed" });
+      return res.status(500).json({ error: "Database update failed" });
     } 
     res.json({message:"approved!"});
   });
