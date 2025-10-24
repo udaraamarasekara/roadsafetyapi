@@ -1,149 +1,102 @@
-const express = require('express')
+const express = require('express');
 const router = express.Router();
 const db = require('./db');
 const { setViolation, getViolation } = require('./violations');
 const { notifyViolation } = require('./notification');
 
-router.post("/currentStatus", async(req, res) => {
+// ------------------ ROUTES ------------------
 
-   const {time,longitude,latitude,speed,vehicleNo,vehicle,vehicleColor,direction} = req.body
-    var result = await checkForSpeed(longitude,latitude)
-    var signalLight = await findMostRecentSignalLight(longitude,latitude,direction)
-    var prevViolation = getViolation(vehicleNo)
-    if(prevViolation)
-    {
-          prevViolation.type = "delete"
+router.post("/currentStatus", async (req, res) => {
+    const { time, longitude, latitude, speed, vehicleNo, vehicle, vehicleColor, direction, type } = req.body;
 
-    let checkpoint = await findMostRecentCheckpoint(longitude,latitude,direction) 
-    notifyViolation(req,prevViolation.fcm)
-    notifyViolation(req,checkpoint.fcm)
-    setViolation(vehicleNo,{time,longitude,latitude,speed,vehicle,vehicleColor,checkpoint,direction,type})
-   
+    try {
+        const result = await checkForSpeed(longitude, latitude);
+        const signalLight = await findMostRecentSignalLight(longitude, latitude, direction);
+        let prevViolation = getViolation(vehicleNo);
+
+        if (prevViolation) {
+            prevViolation.type = "delete";
+            const checkpoint = await findMostRecentCheckpoint(longitude, latitude, direction);
+
+            notifyViolation(req, prevViolation.fcm);
+            notifyViolation(req, checkpoint.fcm);
+            setViolation(vehicleNo, { time, longitude, latitude, speed, vehicle, vehicleColor, checkpoint, direction, type });
+        }
+
+        res.json({
+            speed: result,
+            signalLight,
+            isViolated: prevViolation ? 1 : 0
+        });
+    } catch (err) {
+        console.error("currentStatus error:", err);
+        res.status(500).json({ error: "Internal server error" });
     }
-   res.json({"speed":result, "signalLight":signalLight,"isViolated":prevViolation.length ? 1:0 })
 });
 
-router.post("/violation", async(req, res) => {
-   const {time,longitude,latitude,speed,vehicleNo,vehicle,vehicleColor,direction,type} = req.body
-   
-    let checkpoint = await findMostRecentCheckpoint(longitude,latitude,direction) 
-    notifyViolation(req,checkpoint.fcm)
-    setViolation(vehicleNo,{time,longitude,latitude,speed,vehicle,vehicleColor,checkpoint,direction,type})
-   
-   res.send("violation recorded")
+router.post("/violation", async (req, res) => {
+    const { time, longitude, latitude, speed, vehicleNo, vehicle, vehicleColor, direction, type } = req.body;
+
+    try {
+        const checkpoint = await findMostRecentCheckpoint(longitude, latitude, direction);
+        notifyViolation(req, checkpoint.fcm);
+        setViolation(vehicleNo, { time, longitude, latitude, speed, vehicle, vehicleColor, checkpoint, direction, type });
+
+        res.send("violation recorded");
+    } catch (err) {
+        console.error("violation route error:", err);
+        res.status(500).send("Internal server error");
+    }
 });
 
+// ------------------ DATABASE HELPERS ------------------
 
 async function checkForSpeed(longitude, latitude) {
-  return new Promise((resolve, reject) => {
-    db.query("SELECT * FROM routes", (err, results) => {
-      if (err) return reject(err);
-
-      for (let result of results) {
-        if (
-          result.minlat < latitude && latitude < result.maxlat &&
-          result.minlng < longitude && longitude < result.maxlng
-        ) {
-          return resolve(result);
-        }
-      }
-
-      resolve(null);
-    });
-  });
+    const [results] = await db.query("SELECT * FROM routes");
+    return results.find(r => latitude > r.minlat && latitude < r.maxlat &&
+                             longitude > r.minlng && longitude < r.maxlng) || null;
 }
 
 async function searchCheckpoints() {
-  return new Promise((resolve, reject) => {
-    db.query("SELECT * FROM checkpoint", (err, results) => {
-      if (err) return reject(err);
-       resolve(results);
-    });
-  });
+    const [results] = await db.query("SELECT * FROM checkpoint");
+    return results;
 }
 
 async function searchSignalLights() {
-  return new Promise((resolve, reject) => {
-    db.query("SELECT * FROM signal_ights", (err, results) => {
-      if (err) return reject(err);
-      resolve(results);
-    });
-  });
+    const [results] = await db.query("SELECT * FROM signal_lights");
+    return results;
 }
-// usage inside an Express route
 
-
+// ------------------ UTILITIES ------------------
 
 function distance2D(coord1, coord2) {
-  const dx = coord2.longitude - coord1.longitude; // X = longitude
-  const dy = coord2.latitude - coord1.latitude; // Y = latitude
-  return Math.sqrt(dx * dx + dy * dy);
+    const dx = coord2.longitude - coord1.longitude;
+    const dy = coord2.latitude - coord1.latitude;
+    return Math.sqrt(dx * dx + dy * dy);
 }
 
-
-async function findMostRecentSignalLight(longitude,latitude,direction)
-{   
-  var signals = await searchSignalLights()
- if (direction < 90 && direction > 0) 
-  {  
- return  signals.reduce((prev, curr) => 
-         curr.latitude > latitude && curr.longitude > longitude &&  distance2D(curr, {longitude,latitude}) < distance2D(prev, {longitude,latitude}) ? curr : prev
-   )
-  }
-   if (direction < 180 && direction > 90) 
-{
-   return  signals.reduce((prev, curr) => 
-         curr.latitude > latitude && curr.longitude < longitude &&  distance2D(curr, {longitude,latitude}) < distance2D(prev, {longitude,latitude}) ? curr : prev
-   )
-}
- if (direction < 270 && direction > 180) 
-  {  
- return  signals.reduce((prev, curr) => 
-         curr.latitude < latitude && curr.longitude < longitude &&  distance2D(curr, {longitude,latitude}) < distance2D(prev, {longitude,latitude}) ? curr : prev
-   )
-  }
-   if (direction < 180 && direction > 90) 
-{
-   return  signals.reduce((prev, curr) => 
-         curr.latitude < latitude && curr.longitude > longitude &&  distance2D(curr, {longitude,latitude}) < distance2D(prev, {longitude,latitude}) ? curr : prev
-   )
-}
-else{
-  return "eee"
-}
+function filterByDirection(items, longitude, latitude, direction) {
+    return items.filter(item => {
+        if (direction > 0 && direction < 90) return item.latitude > latitude && item.longitude > longitude;
+        if (direction >= 90 && direction < 180) return item.latitude > latitude && item.longitude < longitude;
+        if (direction >= 180 && direction < 270) return item.latitude < latitude && item.longitude < longitude;
+        if (direction >= 270 && direction <= 360) return item.latitude < latitude && item.longitude > longitude;
+        return false;
+    });
 }
 
+async function findMostRecentSignalLight(longitude, latitude, direction) {
+    const signals = await searchSignalLights();
+    const filtered = filterByDirection(signals, longitude, latitude, direction);
+    if (!filtered.length) return null;
+    return filtered.reduce((prev, curr) => distance2D(curr, { longitude, latitude }) < distance2D(prev, { longitude, latitude }) ? curr : prev);
+}
 
-async function findMostRecentCheckpoint(longitude,latitude,direction)
-{   
-  var checkpoints = await searchCheckpoints()
- if (direction < 90 && direction > 0) 
-  {  
- return  checkpoints.reduce((prev, curr) => 
-         curr.latitude > latitude && curr.longitude > longitude &&  distance2D(curr, {longitude,latitude}) < distance2D(prev, {longitude,latitude}) ? curr : prev
-   )
-  }
-   if (direction < 180 && direction > 90) 
-{
-   return  checkpoints.reduce((prev, curr) => 
-         curr.latitude > latitude && curr.longitude < longitude &&  distance2D(curr, {longitude,latitude}) < distance2D(prev, {longitude,latitude}) ? curr : prev
-   )
-}
- if (direction < 270 && direction > 180) 
-  {  
- return  checkpoints.reduce((prev, curr) => 
-         curr.latitude < latitude && curr.longitude < longitude &&  distance2D(curr, {longitude,latitude}) < distance2D(prev, {longitude,latitude}) ? curr : prev
-   )
-  }
-   if (direction < 180 && direction > 90) 
-{
-   return  checkpoints.reduce((prev, curr) => 
-         curr.latitude < latitude && curr.longitude > longitude &&  distance2D(curr, {longitude,latitude}) < distance2D(prev, {longitude,latitude}) ? curr : prev
-   )
-}
-else{
-  return "eee"
-}
+async function findMostRecentCheckpoint(longitude, latitude, direction) {
+    const checkpoints = await searchCheckpoints();
+    const filtered = filterByDirection(checkpoints, longitude, latitude, direction);
+    if (!filtered.length) return null;
+    return filtered.reduce((prev, curr) => distance2D(curr, { longitude, latitude }) < distance2D(prev, { longitude, latitude }) ? curr : prev);
 }
 
 module.exports = router;

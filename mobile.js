@@ -1,92 +1,106 @@
-const express = require('express')
+const express = require('express');
 const router = express.Router();
-const db = require('./db');
+const db = require('./db'); // mysql2/promise pool
 const { clearViolation } = require('./violations');
 
+// ------------------ AUTH MIDDLEWARE ------------------
 
-function authMobile(req,res,next) {
- if(req.path == "/approve")
- {
-   next()
- }
- else{
-  const id = req.headers.id;
-  const number = req.headers.number;
-  if(id && number)
-  {
-  const sql = 'SELECT * FROM officers WHERE id = ? AND number = ? LIMIT 1';
-  db.query(sql, [id,number], (err, results) => {
-    if (err) {
-      console.error('Database error:', err);
-      return res.status(500).json({ message: 'Database error' });
+async function authMobile(req, res, next) {
+    try {
+        if (req.path === "/approve") {
+            return next();
+        }
+
+        const id = req.headers.id;
+        const number = req.headers.number;
+
+        if (!id || !number) {
+            return res.status(404).json({ exists: false, message: 'User not found' });
+        }
+
+        const [results] = await db.query(
+            'SELECT * FROM officers WHERE id = ? AND number = ? LIMIT 1',
+            [id, number]
+        );
+
+        if (results.length === 0) {
+            return res.status(404).json({ exists: false, message: 'User not found' });
+        }
+
+        next();
+    } catch (err) {
+        console.error('Auth middleware error:', err);
+        res.status(500).json({ message: 'Internal server error' });
     }
-
-    if (results.length === 0) {
-      // No row found
-      return res.status(404).json({ exists: false, message: 'User not found' });
-    }
-
-    // Row found
-   next()
-  });
-  }
-  else{
-          return res.status(404).json({ exists: false, message: 'User not found' });
-
-  }
- }
 }
 
-router.use(authMobile)
+router.use(authMobile);
 
+// ------------------ ROUTES ------------------
 
-router.post("/location", (req, res) => {
-    const {latitude, longitude,fcm} = req.body;
-  const sql = "INSERT INTO checkpoint (latitude, longitude,status,fcm,officer_id) VALUES (?,?,'active',?,?)";
-  db.query(sql, [latitude, longitude,fcm,req.headers.id], (err, result) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).json({ error: "Database insert failed" });
-    } 
-    res.json({message:"work started!",workId:result.insertId});
-  });
-});
+router.post("/location", async (req, res) => {
+    const { latitude, longitude, fcm } = req.body;
+    const officerId = req.headers.id;
 
-router.post("/approve", (req, res) => {
-    const {id,number} = req.body;
-  const sql = "UPDATE officers SET approved = 1 WHERE id = ? AND number = ?";
-  db.query(sql, [id, number], (err, result) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).json({ error: "Database update failed" });
-    } 
-    res.json({message:"approved!"});
-  });
-});
+    try {
+        const [result] = await db.query(
+            "INSERT INTO checkpoint (latitude, longitude, status, fcm, officer_id) VALUES (?, ?, 'active', ?, ?)",
+            [latitude, longitude, fcm, officerId]
+        );
 
-router.delete('/location/:id', (req, res) => {
-  const userId = req.params.id;
-  console.log(userId);
-  const sql = 'DELETE FROM checkpoint WHERE id = ?';
-  db.query(sql, [userId], (err, result) => {
-    if (err) {
-      console.error('Error deleting record:', err);
-      return res.status(500).json({ message: 'Database error' });
+        res.json({ message: "Work started!", workId: result.insertId });
+    } catch (err) {
+        console.error('Insert checkpoint error:', err);
+        res.status(500).json({ error: "Database insert failed" });
     }
-
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-
-    res.json({ message: 'Work finished' });
-  });
 });
 
-router.delete('/violation/:id', (req, res) => {
-  const vehicleNo = req.params.id;
-  clearViolation(vehicleNo)
-      res.json({ message: 'tracking finished' });
+router.post("/approve", async (req, res) => {
+    const { id, number } = req.body;
 
+    try {
+        const [result] = await db.query(
+            "UPDATE officers SET approved = 1 WHERE id = ? AND number = ?",
+            [id, number]
+        );
+
+        res.json({ message: "Approved!" });
+    } catch (err) {
+        console.error('Approve officer error:', err);
+        res.status(500).json({ error: "Database update failed" });
+    }
+});
+
+router.delete('/location/:id', async (req, res) => {
+    const checkpointId = req.params.id;
+
+    try {
+        const [result] = await db.query(
+            'DELETE FROM checkpoint WHERE id = ?',
+            [checkpointId]
+        );
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: 'Checkpoint not found' });
+        }
+
+        res.json({ message: 'Work finished' });
+    } catch (err) {
+        console.error('Delete checkpoint error:', err);
+        res.status(500).json({ message: 'Database error' });
+    }
+});
+
+router.delete('/violation/:id', async (req, res) => {
+    const vehicleNo = req.params.id;
+
+    try {
+        await clearViolation(vehicleNo); // make sure clearViolation is async
+        res.json({ message: 'Tracking finished' });
+    } catch (err) {
+        console.error('Clear violation error:', err);
+        res.status(500).json({ message: 'Database error' });
+    }
 });
 
 module.exports = router;
