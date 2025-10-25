@@ -104,8 +104,9 @@ router.delete('/violation/:id', async (req, res) => {
 });
 
 router.get('/currentStatus/:id', async (req, res) => {
-    const vehicleNo = req.params.id;          
-    res.json({ message:getViolation(vehicleNo) });
+    const vehicleNo = req.params.id;   
+    let violation =getViolation(vehicleNo)       
+    res.json({ latitude:violation.latitude,longitude:violation.longitude });
  
     
 });
