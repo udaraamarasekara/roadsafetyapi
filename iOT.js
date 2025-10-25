@@ -4,25 +4,95 @@ const db = require('./db');
 const { setViolation, getViolation } = require('./violations');
 const { notifyViolation } = require('./notification');
 
+
+
+
+
+async function authIot(req, res, next) {
+    try {
+        const number = req.headers.number;
+        const secret = req.headers.secret;
+
+        if (!secret || !number) {
+            return res.status(404).json({ exists: false, message: 'Vehicle not found' });
+        }
+
+        const [results] = await db.query(
+            'SELECT * FROM vehicles WHERE secret = ? AND vehicleNo = ? LIMIT 1',
+            [secret, number]
+        );
+
+        if (results.length === 0) {
+            return res.status(404).json({ exists: false, message: 'Vehicle not found' });
+        }
+
+        next();
+    } catch (err) {
+        console.error('Auth middleware error:', err);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+}
+
+router.use(authIot);
+
+
+
+
+
+
 // ------------------ ROUTES ------------------
 
 router.post("/currentStatus", async (req, res) => {
     const { time, longitude, latitude, speed, vehicleNo, vehicle, vehicleColor, direction, type } = req.body;
 
     try {
-        const result = await checkForSpeed(longitude, latitude);
-        const signalLight = await findMostRecentSignalLight(longitude, latitude, direction);
+        console.log("Received currentStatus:", req.body);
+
+        // ------------------- 1. Check speed -------------------
+        let result = null;
+        try {
+            result = await checkForSpeed(longitude, latitude);
+            console.log("Speed check result:", result);
+        } catch (err) {
+            console.error("checkForSpeed failed:", err);
+        }
+
+        // ------------------- 2. Find most recent signal light -------------------
+        let signalLight = null;
+        try {
+            signalLight = await findMostRecentSignalLight(longitude, latitude, direction);
+            console.log("Most recent signal light:", signalLight);
+        } catch (err) {
+            console.error("findMostRecentSignalLight failed:", err);
+        }
+
+        // ------------------- 3. Handle previous violation -------------------
         let prevViolation = getViolation(vehicleNo);
-
         if (prevViolation) {
+            console.log("Previous violation found:", prevViolation);
             prevViolation.type = "delete";
-            const checkpoint = await findMostRecentCheckpoint(longitude, latitude, direction);
 
-            notifyViolation(req, prevViolation.fcm);
-            notifyViolation(req, checkpoint.fcm);
+            var checkpoint = null;
+            try {
+                checkpoint = await findMostRecentCheckpoint(longitude, latitude, direction);
+                console.log("Most recent checkpoint:", checkpoint);
+            } catch (err) {
+                console.error("findMostRecentCheckpoint failed:", err);
+            }
+
+            // Notify asynchronously but do not block response
+            if (prevViolation.fcm) {
+                notifyViolation(req, prevViolation.fcm).catch(err => console.error("notifyViolation prev failed:", err));
+            }
+            if (checkpoint?.fcm) {
+                notifyViolation(req, checkpoint.fcm).catch(err => console.error("notifyViolation checkpoint failed:", err));
+            }
+
+            // Update violation
             setViolation(vehicleNo, { time, longitude, latitude, speed, vehicle, vehicleColor, checkpoint, direction, type });
         }
 
+        // ------------------- 4. Send response -------------------
         res.json({
             speed: result,
             signalLight,
@@ -39,6 +109,10 @@ router.post("/violation", async (req, res) => {
 
     try {
         const checkpoint = await findMostRecentCheckpoint(longitude, latitude, direction);
+        if(!checkpoint)
+        {               
+          res.send("violation recorded but no Checkpoint detected!");
+        }
         notifyViolation(req, checkpoint.fcm);
         setViolation(vehicleNo, { time, longitude, latitude, speed, vehicle, vehicleColor, checkpoint, direction, type });
 

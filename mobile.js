@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('./db'); // mysql2/promise pool
-const { clearViolation } = require('./violations');
+const { clearViolation, getViolation } = require('./violations');
 
 // ------------------ AUTH MIDDLEWARE ------------------
 
@@ -101,6 +101,13 @@ router.delete('/violation/:id', async (req, res) => {
         console.error('Clear violation error:', err);
         res.status(500).json({ message: 'Database error' });
     }
+});
+
+router.get('/currentStatus/:id', async (req, res) => {
+    const vehicleNo = req.params.id;          
+    res.json({ message:getViolation(vehicleNo) });
+ 
+    
 });
 
 module.exports = router;
