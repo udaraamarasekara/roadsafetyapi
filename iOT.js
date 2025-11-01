@@ -135,11 +135,33 @@ async function searchCheckpoints() {
     const [results] = await db.query("SELECT * FROM checkpoint");
     return results;
 }
-
+async function getLastCheckpoint() {
+    const [results] = await db.query("SELECT * FROM checkpoint ORDER BY id DESC LIMIT 1");
+    return results[0]; // return only the single row
+}
 async function searchSignalLights() {
     const [results] = await db.query("SELECT * FROM signal_lights");
     return results;
 }
+
+
+router.get("/test", async (req, res) => {
+
+    try {
+        const checkpoint = await getLastCheckpoint();
+        if(!checkpoint)
+        {               
+          res.send("no Checkpoint detected!");
+        }
+        res.send(checkpoint);
+    } catch (err) {
+        console.error("route error:", err);
+        res.status(500).send("Internal server error");
+    }
+});
+
+
+
 
 // ------------------ UTILITIES ------------------
 
