@@ -173,10 +173,10 @@ function distance2D(coord1, coord2) {
 
 function filterByDirection(items, longitude, latitude, direction) {
     return items.filter(item => {
-        if (direction > 0 && direction < 90) return item.latitude < latitude && item.longitude < longitude;
-        if (direction >= 90 && direction < 180) return item.latitude < latitude && item.longitude > longitude;
-        if (direction >= 180 && direction < 270) return item.latitude > latitude && item.longitude > longitude;
-        if (direction >= 270 && direction <= 360) return item.latitude > latitude && item.longitude < longitude;
+        if (direction > 0 && direction < 90) return item.latitude > latitude && item.longitude > longitude;
+        if (direction >= 90 && direction < 180) return item.latitude > latitude && item.longitude < longitude;
+        if (direction >= 180 && direction < 270) return item.latitude < latitude && item.longitude < longitude;
+        if (direction >= 270 && direction <= 360) return item.latitude < latitude && item.longitude > longitude;
         return false;
     });
 }
