@@ -81,12 +81,12 @@ router.post("/currentStatus", async (req, res) => {
             }
 
             // Notify asynchronously but do not block response
-            if (prevViolation.fcm) {
-                notifyViolation(req, prevViolation.fcm).catch(err => console.error("notifyViolation prev failed:", err));
-            }
-            if (checkpoint?.fcm) {
-                notifyViolation(req, checkpoint.fcm).catch(err => console.error("notifyViolation checkpoint failed:", err));
-            }
+            // if (prevViolation.fcm) {
+            //     notifyViolation(req, prevViolation.fcm).catch(err => console.error("notifyViolation prev failed:", err));
+            // }
+            // if (checkpoint?.fcm) {
+            //     notifyViolation(req, checkpoint.fcm).catch(err => console.error("notifyViolation checkpoint failed:", err));
+            // }
 
             // Update violation
             setViolation(vehicleNo, { time, longitude, latitude, speed, vehicle, vehicleColor, checkpoint, direction, type });
